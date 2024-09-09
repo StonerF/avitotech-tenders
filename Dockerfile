@@ -6,12 +6,12 @@ ADD go.mod .
 
 COPY . .
 
-RUN go build -o hello hello.go
+RUN go build -o main main.go
 
 FROM alpine
 
 WORKDIR /build
 
-COPY --from=builder /build/hello /build/hello
+COPY --from=builder /build/main /build/main
 
-CMD [". /hello"]
+CMD [". /main"]
