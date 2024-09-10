@@ -8,9 +8,11 @@ COPY . .
 
 RUN go build -o main cmd/main.go
 
-EXPOSE 8080
+
 
 FROM alpine
+
+EXPOSE 8080 
 
 WORKDIR /build
 
