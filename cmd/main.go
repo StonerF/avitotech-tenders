@@ -60,6 +60,12 @@ func main() {
 			log.Info("error response")
 		}
 	})
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		_, err := w.Write([]byte("ti loh ahahhhahhahhahhaah"))
+		if err != nil {
+			log.Info("error response")
+		}
+	})
 
 	log.Info("starting server", slog.String("address", Cfg.Address))
 
