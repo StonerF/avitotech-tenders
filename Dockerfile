@@ -1,21 +1,36 @@
-FROM golang:alpine AS builder
+# Build stage
+FROM golang:latest AS builder
 
-WORKDIR /build
+# Install necessary build tools
 
-ADD go.mod .
+# Set the working directory
+WORKDIR /app
 
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy the source code
 COPY . .
 
-RUN go build -o main cmd/main.go
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/main.go
+
+# Final stage
+FROM alpine:latest
 
 
+WORKDIR /root/
 
-FROM alpine
+# Copy the binary from the builder stage
+COPY --from=builder /app/main .
 
-EXPOSE 8080 
+# Expose the port the app runs on
+EXPOSE 8080
 
-WORKDIR /build
+# Copy .env file
 
-COPY --from=builder /build/main /build/main
-
-CMD [". /main"]
+# Run the binary
+CMD ["./main"]
