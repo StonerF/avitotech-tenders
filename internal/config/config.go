@@ -1,7 +1,6 @@
 package config
 
 import (
-	"log"
 	"os"
 	"time"
 )
@@ -19,9 +18,6 @@ type HttpServer struct {
 
 func MustLoad() *Config {
 	Server_adress := os.Getenv("SERVER_ADDRESS")
-	if Server_adress == "" {
-		log.Fatal("Server address is empty")
-	}
 	var Cfg Config
 	Cfg.Address = Server_adress
 	str_path := os.Getenv("POSTGERS_CONN")

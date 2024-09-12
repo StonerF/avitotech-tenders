@@ -20,9 +20,15 @@ import (
 )
 
 const (
-	envlocal = "local"
-	envDev   = "dev"
-	envProd  = "prod"
+	envlocal             = "local"
+	envDev               = "dev"
+	envProd              = "prod"
+	host                 = "rc1b-5xmqy6bq501kls4m.mdb.yandexcloud.net"
+	port                 = 6432
+	dbname               = "cnrprod1725724920-team-79197"
+	user                 = "cnrprod1725724920-team-79197"
+	password             = "cnrprod1725724920-team-79197"
+	target_session_attrs = "read-write"
 )
 
 func main() {
@@ -36,8 +42,12 @@ func main() {
 	log.Info("starting service", slog.String("env", "local"))
 	log.Debug("debug message are enabled")
 
+	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
+		"password=%s dbname=%s sslmode=require",
+		host, port, user, password, dbname)
+
 	// TODO : init db : Postresql(sqlite)
-	storage, err := postgres.New(Cfg.StoragePath)
+	storage, err := postgres.New(psqlInfo)
 	if err != nil {
 		log.Error("failed to init storage", sl.Err(err))
 		os.Exit(1)
@@ -59,6 +69,7 @@ func main() {
 		if err != nil {
 			log.Info("error response")
 		}
+		log.Info("otvet poluchen", slog.Any("req", w))
 	})
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		_, err := w.Write([]byte("ti loh ahahhhahhahhahhaah"))
@@ -72,7 +83,7 @@ func main() {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	srv := &http.Server{
-		Addr:         Cfg.Address,
+		Addr:         "0.0.0.0:8080",
 		Handler:      r,
 		ReadTimeout:  Cfg.HttpServer.Timeout,
 		WriteTimeout: Cfg.HttpServer.Timeout,
