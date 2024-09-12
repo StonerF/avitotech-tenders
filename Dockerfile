@@ -1,5 +1,4 @@
 FROM golang:alpine AS builder
-EXPOSE 8080
 
 WORKDIR /build
 
@@ -9,4 +8,14 @@ COPY . .
 
 RUN go build -o main cmd/main.go
 
-CMD [". /cmd/main"]
+
+
+FROM alpine
+
+EXPOSE 8080 
+
+WORKDIR /build
+
+COPY --from=builder /build/main /build/main
+
+CMD [". /main"]
