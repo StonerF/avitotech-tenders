@@ -3,6 +3,6 @@ package storage
 import "errors"
 
 var (
-	ErrGrnotfound = errors.New("graph not found")
-	ErrGrisExist  = errors.New("graph exists")
+	Errnotfoundresp = errors.New("username have not roots orgs")
+	ErrGrisExist    = errors.New("not this organization")
 )

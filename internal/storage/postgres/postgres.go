@@ -27,6 +27,9 @@ func (str *Storage) Ping() {
 		log.Fatal("don't ping")
 	}
 }
+func (str *Storage) Close() {
+	str.db.Close()
+}
 
 /*
 func (s *Storage) IsExist(Len int, Graph [][]int) (bool, error) {
