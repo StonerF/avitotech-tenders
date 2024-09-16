@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"avitotech/tenders/internal/auth"
 	"avitotech/tenders/internal/config"
 	"avitotech/tenders/internal/http-server/handlers/api/bids"
 	"avitotech/tenders/internal/http-server/handlers/api/tenders"
@@ -32,10 +33,6 @@ const (
 	envlocal             = "local"
 	envDev               = "dev"
 	envProd              = "prod"
-	host                 = "rc1b-5xmqy6bq501kls4m.mdb.yandexcloud.net"
-	port                 = 6432
-	dbname               = "cnrprod1725724920-team-79197"
-	user                 = "cnrprod1725724920-team-79197"
 	password             = "cnrprod1725724920-team-79197"
 	target_session_attrs = "read-write"
 )
@@ -60,13 +57,9 @@ func main() {
 	log.Info("starting service", slog.String("env", "local"))
 	log.Debug("debug message are enabled")
 
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
-		"password=%s dbname=%s sslmode=require target_session_attrs=%s",
-		host, port, user, password, dbname, target_session_attrs)
-
-	// TODO : init db : Postresql(sqlite)
-
-	// TODO : init router : chi
+	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s "+
+		"password=%s dbname=%s sslmode=disable",
+		Cfg.Host, Cfg.Port, Cfg.User, Cfg.Password, Cfg.Name)
 
 	r := chi.NewRouter()
 	// middleware
@@ -91,19 +84,12 @@ func main() {
 		storage.Close()
 		log.Info("otvet poluchen", slog.Any("req", w))
 	})
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write([]byte("ti loh ahahhhahhahhahhaah"))
-		if err != nil {
-			log.Info("error response")
-		}
-	})
 	r.Post("/api/tenders/new", func(w http.ResponseWriter, r *http.Request) {
 		req := tenders.Tender{}
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil {
 			log.Info("error decode", slog.Any("err:", err))
 		}
-		//fmt.Println(req)
 		tenobj, errten := tenders.Create(req)
 		if errten != nil {
 			log.Info("error db", slog.Any("err:", errten))
@@ -152,6 +138,7 @@ func main() {
 			})
 			return
 		}
+		defer stmt.Close()
 		defer db.Close()
 		limnum, err := strconv.Atoi(lim)
 		if err != nil {
@@ -161,7 +148,6 @@ func main() {
 			})
 			return
 		}
-		//fmt.Println("checkpoint")
 		offnum, err := strconv.Atoi(offset)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -208,6 +194,15 @@ func main() {
 			ser_type = append(ser_type, ser3)
 		}*/
 		ser_type := r.URL.Query()["service_type"]
+		for i := range ser_type {
+			if _, ok := typeservices[ser_type[i]]; !ok {
+				w.WriteHeader(http.StatusBadRequest)
+				render.JSON(w, r, ResponseError{
+					Reason: "invalid query string",
+				})
+				return
+			}
+		}
 		limnum, err := strconv.Atoi(lim)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -227,51 +222,29 @@ func main() {
 		}
 		dop := ` `
 		if len(ser_type) == 0 {
-			dop = ""
+			dop = ``
 		} else {
-
 			for i := range ser_type {
-				if _, ok := typeservices[ser_type[i]]; !ok {
-					w.WriteHeader(http.StatusBadRequest)
-					render.JSON(w, r, ResponseError{
-						Reason: "invalid query string",
-					})
-					return
+				dop = dop + `type = ` + `'` + ser_type[i] + `'` + ` `
+				if i != len(ser_type) {
+					dop += `OR`
 				}
-				if ser_type[i] != "" {
-					if i != 0 {
-						dop += ` `
-					}
-					dop += `type=`
-					dop += `'`
-					dop += ser_type[i]
-					dop += `'`
-					dop += ` `
-					if i != len(ser_type)-1 {
-						dop += `OR`
-					}
-				}
-				//fmt.Println(dop)
-
 			}
+
 		}
 		db, err := sql.Open("postgres", psqlInfo)
 		if err != nil {
 			panic(err)
 		}
-		ans := tenders.Get(psqlInfo, dop, db)
-		sort.Slice(ans, func(i, j int) bool {
-			return ans[i].Name < ans[j].Name
-		})
-		if offnum >= len(ans) {
-			ans = make([]tenders.TenderResponse, 0)
-		} else if offnum+limnum > len(ans) {
-			ans = ans[offnum:]
-		} else if offnum == 0 && limnum < len(ans) {
-			ans = ans[:limnum]
-		} else {
-			ans = ans[offnum : offnum+limnum]
+		ans, errr := tenders.Get(dop, db, limnum, offnum)
+		if errors.Is(errr, sql.ErrNoRows) {
+			w.WriteHeader(http.StatusNotFound)
+			render.JSON(w, r, ResponseError{
+				Reason: "no one tender is not exist",
+			})
+			return
 		}
+
 		render.JSON(w, r, ans)
 
 	})
@@ -297,7 +270,7 @@ func main() {
 		id := ""
 
 		db, _ := sql.Open("postgres", psqlInfo)
-		isexsists := tenders.Tenderidexist(tenderid, db)
+		isexsists := auth.Tenderidexist(tenderid, db)
 		if !isexsists {
 			w.WriteHeader(http.StatusNotFound)
 			render.JSON(w, r, ResponseError{
@@ -327,7 +300,7 @@ func main() {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Published"))
 		} else {
-			orgOutside, flag := tenders.ResponsibleClient(id, psqlInfo, db)
+			orgOutside, flag := auth.ResponsibleClient(id, psqlInfo, db)
 			if flag == false {
 				w.WriteHeader(http.StatusForbidden)
 				render.JSON(w, r, ResponseError{
@@ -357,7 +330,7 @@ func main() {
 		var Bid bids.Bids
 		err = render.DecodeJSON(r.Body, &Bid)
 		if Bid.AuthorType == "Orgnization" {
-			IsEx := tenders.OrgIsExsits(Bid.AuthorId, db)
+			IsEx := auth.OrgIsExsits(Bid.AuthorId, db)
 			if !IsEx {
 				w.WriteHeader(http.StatusUnauthorized)
 				render.JSON(w, r, ResponseError{
@@ -382,7 +355,7 @@ func main() {
 				})
 				return
 			}
-			iduser, flag := tenders.Validuser(Bid.AuthorId, db)
+			iduser, flag := auth.Validuser(Bid.AuthorId, db)
 			fmt.Println(iduser)
 			if !flag {
 				w.WriteHeader(http.StatusUnauthorized)
@@ -391,7 +364,7 @@ func main() {
 				})
 				return
 			}
-			_, flag2 := tenders.ResponsibleClient(Bid.AuthorId, psqlInfo, db)
+			_, flag2 := auth.ResponsibleClient(Bid.AuthorId, psqlInfo, db)
 			if !flag2 {
 				w.WriteHeader(http.StatusForbidden)
 				render.JSON(w, r, ResponseError{
@@ -477,7 +450,7 @@ func main() {
 		username := r.URL.Query().Get("username")
 		id := ""
 		db, _ := sql.Open("postgres", psqlInfo)
-		isexsists := tenders.Tenderidexist(tenderid, db)
+		isexsists := auth.Tenderidexist(tenderid, db)
 		if !isexsists {
 			w.WriteHeader(http.StatusNotFound)
 			render.JSON(w, r, ResponseError{
@@ -513,7 +486,7 @@ func main() {
 			return
 		}
 
-		_, isRes := tenders.ResponsibleClient(id, psqlInfo, db)
+		_, isRes := auth.ResponsibleClient(id, psqlInfo, db)
 		fmt.Println(isRes)
 		if !isRes {
 			if len(bids.GetmyBidslim(db, id, limnum, offnum, tenderid)) == 0 {
@@ -577,7 +550,7 @@ func main() {
 			return
 		}
 		defer db.Close()
-		_, isresp := tenders.ResponsibleClient(id, psqlInfo, db)
+		_, isresp := auth.ResponsibleClient(id, psqlInfo, db)
 		bidsobj := bids.GetbyBidsId(bidsid, db)
 		if !isresp {
 
@@ -598,13 +571,101 @@ func main() {
 		}
 
 	})
+	r.Put("/api/tenders/{tendersid:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[8|9|aA|bB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$}/status", func(w http.ResponseWriter, r *http.Request) {
+		tenderid := chi.URLParam(r, "tenderId")
+		stat := r.URL.Query().Get("status")
+		if stat == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			render.JSON(w, r, ResponseError{
+				Reason: "invalid query string",
+			})
+			return
+		}
+
+		err := uuid.Validate(tenderid)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			render.JSON(w, r, ResponseError{
+				Reason: "invalid query string",
+			})
+			return
+		}
+		username := r.URL.Query().Get("username")
+		if username == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			render.JSON(w, r, ResponseError{
+				Reason: "invalid query string",
+			})
+			return
+		}
+		id := ""
+
+		db, _ := sql.Open("postgres", psqlInfo)
+		isexsists := auth.Tenderidexist(tenderid, db)
+		if !isexsists {
+			w.WriteHeader(http.StatusNotFound)
+			render.JSON(w, r, ResponseError{
+				Reason: "tender not found",
+			})
+			return
+		}
+		stmt, _ := db.Prepare(`SELECT id FROM employee WHERE username = $1 `)
+		err = stmt.QueryRow(username).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(http.StatusUnauthorized)
+			render.JSON(w, r, ResponseError{
+				Reason: "username don't authorized or not exist",
+			})
+			return
+		}
+		Resid, isRes := auth.ResponsibleClient(id, psqlInfo, db)
+		if !isRes {
+			w.WriteHeader(http.StatusForbidden)
+			render.JSON(w, r, ResponseError{
+				Reason: "username don't have permission",
+			})
+			return
+		} else {
+			tenOrgid, Isex := auth.OrgFromTender(tenderid, db)
+			if !Isex {
+				w.WriteHeader(http.StatusForbidden)
+				render.JSON(w, r, ResponseError{
+					Reason: "username don't have permission",
+				})
+				return
+			}
+			if tenOrgid != Resid {
+				w.WriteHeader(http.StatusForbidden)
+				render.JSON(w, r, ResponseError{
+					Reason: "username don't have permission",
+				})
+				return
+
+			}
+			version := 0
+			_ = db.QueryRow(`SELECT version FROM tenders WHERE id = $1`, tenderid).Scan(&version)
+
+			_, err = db.Query("UPDATE tenders SET status = $1,version = $2 WHERE id = $2", stat, version+1, tenderid)
+			if err != nil {
+				w.WriteHeader(http.StatusNotFound)
+				render.JSON(w, r, ResponseError{
+					Reason: "tender not exsits",
+				})
+				return
+			}
+			Otvet := tenders.GetbyTenderId(tenderid, psqlInfo, db)
+			render.JSON(w, r, Otvet)
+
+		}
+
+	})
 
 	log.Info("starting server", slog.String("address", Cfg.Address))
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	srv := &http.Server{
-		Addr:         "0.0.0.0:8080",
+		Addr:         Cfg.Address,
 		Handler:      r,
 		ReadTimeout:  Cfg.HttpServer.Timeout,
 		WriteTimeout: Cfg.HttpServer.Timeout,

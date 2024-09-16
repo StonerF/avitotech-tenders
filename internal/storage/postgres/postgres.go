@@ -24,7 +24,7 @@ func New(str string) (*Storage, error) {
 func (str *Storage) Ping() {
 	err := str.db.Ping()
 	if err != nil {
-		log.Fatal("don't ping")
+		log.Fatal("don't ping", err)
 	}
 }
 func (str *Storage) Close() {

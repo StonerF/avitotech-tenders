@@ -1,29 +1,32 @@
 package config
 
 import (
-	"os"
+	"log"
 	"time"
+
+	"github.com/ilyakaznacheev/cleanenv"
 )
 
 type Config struct {
-	StoragePath string
+	Port     string `yaml:"port" env:"PORT" env-default:"5432"`
+	Host     string `yaml:"host" env:"HOST" env-default:"localhost"`
+	Name     string `yaml:"name" env:"NAME" env-default:"postgres"`
+	User     string `yaml:"user" env:"USER" env-default:"user"`
+	Password string `yaml:"password" env:"PASSWORD"`
 	HttpServer
 }
 
 type HttpServer struct {
-	Address      string
-	Timeout      time.Duration
-	Idle_timeout time.Duration
+	Address      string        `yaml:"address" env:"ADDERSS" env-default:"localhost:8080"`
+	Timeout      time.Duration `yaml:"timeout" env:"TIMEOUT" env-default:"4s"`
+	Idle_timeout time.Duration `yaml:"idle_timeout" env:"IDLE_TIMEOUT" env-default:"60s"`
 }
 
 func MustLoad() *Config {
-	Server_adress := os.Getenv("SERVER_ADDRESS")
 	var Cfg Config
-	Cfg.Address = Server_adress
-	str_path := os.Getenv("POSTGERS_CONN")
-	Cfg.StoragePath = str_path
-	Cfg.Timeout = 4 * time.Second
-	Cfg.Idle_timeout = 60 * time.Second
+	if err := cleanenv.ReadConfig("../config/config.yaml", &Cfg); err != nil {
+		log.Fatalf("cannot read config: %s", err)
+	}
 
 	return &Cfg
 

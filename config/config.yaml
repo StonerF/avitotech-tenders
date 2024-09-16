@@ -1,0 +1,10 @@
+env: "local"
+host: localhost
+port: 5432
+user: admin
+name: tenders-bids
+password: admin
+http_server:
+  address: "0.0.0.0:8080"
+  timeout: 4s
+  idle_timeout: 30s
